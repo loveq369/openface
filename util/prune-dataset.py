@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-from collections import defaultdict
 import os
 import shutil
 
@@ -9,7 +8,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('inPlaceDir', type=str,
                         help="Directory to prune in-place.")
-    parser.add_argument('--numImagesThreshold', type=str,
+    parser.add_argument('--numImagesThreshold', type=int,
                         help="Delete directories with less than this many images.",
                         default=10)
     args = parser.parse_args()

@@ -28,10 +28,16 @@ paths.dofile('train.lua')
 paths.dofile('test.lua')
 paths.dofile('util.lua')
 
+if opt.peoplePerBatch > nClasses then
+  print('\n\nError: opt.peoplePerBatch > number of classes. Please decrease this value.')
+  print('  + opt.peoplePerBatch: ', opt.peoplePerBatch)
+  print('  + number of classes: ', nClasses)
+  os.exit(-1)
+end
+
 epoch = opt.epochNumber
 
--- test()
-for i=1,opt.nEpochs do
+for _=1,opt.nEpochs do
    train()
    test()
    epoch = epoch + 1

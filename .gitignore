@@ -1,6 +1,8 @@
-work*
-plots
+build
+_build
 data
+plots
+work*
 *reps
 
 models/facenet/*.t7
@@ -13,6 +15,8 @@ images/examples-aligned
 
 evaluation/*/*.csv
 evaluation/*/*.pdf
+evaluation/attic/*/*.csv
+evaluation/attic/*/*.pdf
 
 demos/web/bower_components
 demos/web/unknown*.npy
@@ -20,3 +24,5 @@ demos/web/unknown*.npy
 models/openface/*.t7
 models/openface/*.pkl
 celeb-classifier*
+
+site

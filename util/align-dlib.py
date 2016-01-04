@@ -19,12 +19,16 @@ import sys
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, ".."))
 
+import numpy as np
+
 import argparse
 import cv2
 import random
 import shutil
 
-from skimage import io
+import openface
+import openface.helper
+from openface.data import iterImgs
 
 modelDir = os.path.join(fileDir, '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
@@ -42,7 +46,7 @@ def write(vals, fName):
 
 
 def computeMeanMain(args):
-    align = NaiveDlib(args.dlibFaceMean, args.dlibFacePredictor)
+    align = openface.AlignDlib(args.dlibFaceMean, args.dlibFacePredictor)
 
     imgs = list(iterImgs(args.inputDir))
     if args.numImages > 0:
@@ -84,17 +88,31 @@ def alignMain(args):
     # Shuffle so multiple versions can be run at once.
     random.shuffle(imgs)
 
-    align = NaiveDlib(args.dlibFaceMean, args.dlibFacePredictor)
+    if args.landmarks == 'outerEyesAndNose':
+        landmarkIndices = openface.AlignDlib.OUTER_EYES_AND_NOSE
+    elif args.landmarks == 'innerEyesAndBottomLip':
+        landmarkIndices = openface.AlignDlib.INNER_EYES_AND_BOTTOM_LIP
+    else:
+        raise Exception("Landmarks unrecognized: {}".format(args.landmarks))
+
+    align = openface.AlignDlib(args.dlibFacePredictor)
 
     nFallbacks = 0
     for imgObject in imgs:
         outDir = os.path.join(args.outputDir, imgObject.cls)
-        imgName = "{}/{}.png".format(outDir, imgObject.name)
         openface.helper.mkdirP(outDir)
+        outputPrefix = os.path.join(outDir, imgObject.name)
+        imgName = outputPrefix + ".png"
+
         if not os.path.isfile(imgName):
-            rgb = imgObject.getRGB(cache=False)
-            out = align.alignImg(args.method, args.size, rgb)
-            if args.fallbackLfw and out is None:
+            rgb = imgObject.getRGB()
+            if rgb is not None:
+                print(imgName, type(rgb), rgb.shape)
+                outRgb = align.align(args.size, rgb,
+                                     landmarkIndices=landmarkIndices)
+            else:
+                outRgb = None
+            if args.fallbackLfw and outRgb is None:
                 nFallbacks += 1
                 deepFunneled = "{}/{}.jpg".format(os.path.join(args.fallbackLfw,
                                                                imgObject.cls),
@@ -103,9 +121,12 @@ def alignMain(args):
                                                                           imgObject.cls),
                                                              imgObject.name))
 
-            if out is not None:
-                io.imsave(imgName, out)
-    print('nFallbacks:', nFallbacks)
+            if outRgb is not None:
+                outBgr = cv2.cvtColor(outRgb, cv2.COLOR_RGB2BGR)
+                cv2.imwrite(imgName, outBgr)
+
+    if args.fallbackLfw:
+        print('nFallbacks:', nFallbacks)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -115,10 +136,6 @@ if __name__ == '__main__':
                         default=os.path.join(dlibModelDir, "mean.csv"))
     parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
                         default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
-    parser.add_argument('--dlibRoot', type=str,
-                        default=os.path.expanduser(
-                            "~/src/dlib-18.16/python_examples"),
-                        help="dlib directory with the dlib.so Python library.")
 
     subparsers = parser.add_subparsers(dest='mode', help="Mode")
     computeMeanParser = subparsers.add_parser(
@@ -127,26 +144,17 @@ if __name__ == '__main__':
                                    default=0)  # <= 0 ===> all imgs
     alignmentParser = subparsers.add_parser(
         'align', help='Align a directory of images.')
-    alignmentParser.add_argument('method', type=str,
-                                 choices=['tightcrop', 'affine',
-                                          'perspective', 'homography'],
-                                 help="Alignment method.")
+    alignmentParser.add_argument('landmarks', type=str,
+                                 choices=['outerEyesAndNose', 'innerEyesAndBottomLip'],
+                                 help='The landmarks to align to.')
     alignmentParser.add_argument(
         'outputDir', type=str, help="Output directory of aligned images.")
-    alignmentParser.add_argument('--outputDebugImages', action='store_true',
-                                 help='Output annotated images for debugging and presenting.')
     alignmentParser.add_argument('--size', type=int, help="Default image size.",
-                                 default=152)
+                                 default=96)
     alignmentParser.add_argument('--fallbackLfw', type=str,
                                  help="If alignment doesn't work, fallback to copying the deep funneled version from this directory..")
 
     args = parser.parse_args()
-
-    sys.path.append(args.dlibRoot)
-    import openface
-    import openface.helper
-    from openface.data import iterImgs
-    from openface.alignment import NaiveDlib
 
     if args.mode == 'computeMean':
         computeMeanMain(args)

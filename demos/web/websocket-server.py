@@ -19,6 +19,9 @@ import sys
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, "..", ".."))
 
+import txaio
+txaio.use_twisted()
+
 from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
 from twisted.python import log
@@ -40,26 +43,20 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.manifold import TSNE
 from sklearn.svm import SVC
 
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
 import openface
-
-import tempfile
 
 modelDir = os.path.join(fileDir, '..', '..', 'models')
 dlibModelDir = os.path.join(modelDir, 'dlib')
 openfaceModelDir = os.path.join(modelDir, 'openface')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dlibFaceMean', type=str, help="Path to dlib's face predictor.",
-                    default=os.path.join(dlibModelDir, "mean.csv"))
 parser.add_argument('--dlibFacePredictor', type=str, help="Path to dlib's face predictor.",
                     default=os.path.join(dlibModelDir, "shape_predictor_68_face_landmarks.dat"))
-parser.add_argument('--dlibRoot', type=str,
-                    default=os.path.expanduser(
-                        "~/src/dlib-18.15/python_examples"),
-                    help="dlib directory with the dlib.so Python library.")
 parser.add_argument('--networkModel', type=str, help="Path to Torch network model.",
                     default=os.path.join(openfaceModelDir, 'nn4.v1.t7'))
 parser.add_argument('--imgDim', type=int,
@@ -67,15 +64,14 @@ parser.add_argument('--imgDim', type=int,
 parser.add_argument('--cuda', type=bool, default=False)
 parser.add_argument('--unknown', type=bool, default=False,
                     help='Try to predict unknown people')
+parser.add_argument('--port', type=int, default=9000,
+                    help='WebSocket Port')
 
 args = parser.parse_args()
 
-sys.path.append(args.dlibRoot)
-import dlib
-from openface.alignment import NaiveDlib  # Depends on dlib.
-
-align = NaiveDlib(args.dlibFaceMean, args.dlibFacePredictor)
-net = openface.TorchWrap(args.networkModel, imgDim=args.imgDim, cuda=args.cuda)
+align = openface.AlignDlib(args.dlibFacePredictor)
+net = openface.TorchNeuralNet(args.networkModel, imgDim=args.imgDim,
+                              cuda=args.cuda)
 
 
 class Face:
@@ -274,7 +270,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         bbs = [bb] if bb is not None else []
         for bb in bbs:
             # print(len(bbs))
-            alignedFace = align.alignImg("affine", 96, rgbFrame, bb)
+            landmarks = align.findLandmarks(rgbFrame, bb)
+            alignedFace = align.align(96, rgbFrame, bb, landmarks=landmarks)
             if alignedFace is None:
                 continue
 
@@ -282,7 +279,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             if phash in self.images:
                 identity = self.images[phash].identity
             else:
-                rep = net.forwardImage(alignedFace)
+                rep = net.forward(alignedFace)
                 # print(rep)
                 if self.training:
                     self.images[phash] = Face(rep, identity)
@@ -299,7 +296,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     }
                     self.sendMessage(json.dumps(msg))
                 else:
-                    identity = self.svm.predict(rep)[0] if self.svm else -1
+                    if len(self.people) == 0:
+                        identity = -1
+                    elif len(self.people) == 1:
+                        identity = 0
+                    elif self.svm:
+                        identity = self.svm.predict(rep)[0]
+                    else:
+                        print("hhh")
+                        identity = -1
                     if identity not in identities:
                         identities.append(identity)
 
@@ -308,6 +313,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 tr = (bb.right(), bb.top())
                 cv2.rectangle(annotatedFrame, bl, tr, color=(153, 255, 204),
                               thickness=3)
+                for p in [39, 42, 57]:
+                    cv2.circle(annotatedFrame, center=landmarks[p], radius=3,
+                               color=(102, 204, 255), thickness=-1)
                 if identity == -1:
                     if len(self.people) == 1:
                         name = self.people[0]
@@ -340,13 +348,15 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "type": "ANNOTATED",
                 "content": content
             }
+            plt.close()
             self.sendMessage(json.dumps(msg))
 
 if __name__ == '__main__':
     log.startLogging(sys.stdout)
 
-    factory = WebSocketServerFactory("ws://localhost:9000", debug=False)
+    factory = WebSocketServerFactory("ws://localhost:{}".format(args.port),
+                                     debug=False)
     factory.protocol = OpenFaceServerProtocol
 
-    reactor.listenTCP(9000, factory)
+    reactor.listenTCP(args.port, factory)
     reactor.run()

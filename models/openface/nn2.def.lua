@@ -1,4 +1,4 @@
--- Model: def1.lua
+-- Model: nn2.def.lua
 -- Description: Implementation of NN2 from the FaceNet paper.
 -- Input size: 3x224x224
 -- Components: Mostly `nn`
@@ -22,15 +22,26 @@
 -- limitations under the License.
 
 
-function createModel(nGPU)
+function createModel()
    local net = nn.Sequential()
 
    net:add(nn.SpatialConvolutionMM(3, 64, 7, 7, 2, 2, 3, 3))
    net:add(nn.SpatialBatchNormalization(64))
    net:add(nn.ReLU())
 
+   -- The FaceNet paper just says `norm` and that the models are based
+   -- heavily on the inception paper (http://arxiv.org/pdf/1409.4842.pdf),
+   -- which uses pooling and normalization in the same way in the early layers.
+   --
+   -- The Caffe and official versions of this network both use LRN:
+   --
+   --   + https://github.com/BVLC/caffe/tree/master/models/bvlc_googlenet
+   --   + https://github.com/google/inception/blob/master/inception.ipynb
+   --
+   -- The Caffe docs at http://caffe.berkeleyvision.org/tutorial/layers.html
+   -- define LRN to be across channels.
    net:add(nn.SpatialMaxPooling(3, 3, 2, 2, 1, 1))
-   -- Don't use normalization.
+   net:add(nn.CrossMapNormalization(5, 0.0001, 0.75))
 
    -- Inception (2)
    net:add(nn.SpatialConvolutionMM(64, 64, 1, 1))
@@ -40,7 +51,7 @@ function createModel(nGPU)
    net:add(nn.SpatialBatchNormalization(192))
    net:add(nn.ReLU())
 
-   -- Don't use normalization.
+   net:add(nn.CrossMapNormalization(5, 0.0001, 0.75))
    net:add(nn.SpatialMaxPooling(3, 3, 2, 2, 1, 1))
 
    -- Inception (3a)

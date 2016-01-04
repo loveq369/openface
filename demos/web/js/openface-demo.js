@@ -218,9 +218,13 @@ function createSocket(address, name) {
             console.log("Unrecognized message type: " + j.type);
         }
     }
+    socket.onerror = function(e) {
+        console.log("Error creating WebSocket connection to " + address);
+        console.log(e);
+    }
     socket.onclose = function(e) {
         if (e.target == socket) {
-            $("#serverStatus").html("Disconnected.")
+            $("#serverStatus").html("Disconnected.");
         }
     }
 }
@@ -256,6 +260,11 @@ function addPersonCallback(el) {
 
 function trainingChkCallback() {
     training = $("#trainingChk").prop('checked');
+    if (training) {
+        makeTabActive("tab-preview");
+    } else {
+        makeTabActive("tab-annotated");
+    }
     if (socket != null) {
         var msg = {
             'type': 'TRAINING',
@@ -317,11 +326,15 @@ function removeImage(hash) {
 function changeServerCallback() {
     $(this).addClass("active").siblings().removeClass("active");
     switch ($(this).html()) {
+    case "Local":
+        socket.close();
+        redrawPeople();
+        createSocket("ws:" + window.location.hostname + ":9000", "Local");
+        break;
     case "CMU":
         socket.close();
         redrawPeople();
         createSocket("ws://facerec.cmusatyalab.org:9000", "CMU");
-        // createSocket("ws:127.0.0.1:9000", "CMU");
         break;
     case "AWS East":
         socket.close();

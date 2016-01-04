@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 
 import numpy as np
 import pandas as pd
@@ -12,10 +12,14 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 plt.style.use('bmh')
 
-import os
-import sys
-
 import argparse
+
+print("""
+
+Note: This example assumes that `name i` corresponds to `label i`
+in `labels.csv`.
+
+""")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('workDir', type=str)
@@ -38,4 +42,7 @@ for c, i, target_name in zip(colors,
     plt.scatter(X_r[y == i, 0], X_r[y == i, 1],
                 c=c, label=target_name)
 plt.legend()
-plt.savefig("{}/tsne.pdf".format(args.workDir))
+
+out = "{}/tsne.pdf".format(args.workDir)
+plt.savefig(out)
+print("Saved to: {}".format(out))

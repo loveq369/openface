@@ -2,6 +2,8 @@ local ffi = require 'ffi'
 
 local batchNumber, nImgs = 0
 
+torch.setdefaulttensortype('torch.FloatTensor')
+
 function batchRepresent()
    local loadSize   = {3, opt.imgDim, opt.imgDim}
    local dumpLoader = dataLoader{
@@ -22,8 +24,8 @@ function batchRepresent()
       local indexEnd = math.min(nImgs, indexStart + opt.batchSize - 1)
       local inputs, labels = dumpLoader:get(indexStart, indexEnd)
       local paths = {}
-      for i=indexStart,indexEnd do
-         table.insert(paths, ffi.string(dumpLoader.imagePath[i]:data()))
+      for j=indexStart,indexEnd do
+         table.insert(paths, ffi.string(dumpLoader.imagePath[j]:data()))
       end
       repBatch(paths, inputs, labels)
       if i % 5 == 0 then
